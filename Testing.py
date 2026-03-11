@@ -117,7 +117,13 @@ with col2:
         
         # --- Save to Google Sheets (Silently runs if configured) ---
         if predict_clicked:
-            if "gcp_service_account" in st.secrets:
+            has_secrets = False
+            try:
+                has_secrets = "gcp_service_account" in st.secrets
+            except Exception:
+                pass
+                
+            if has_secrets:
                 try:
                     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
                     creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
