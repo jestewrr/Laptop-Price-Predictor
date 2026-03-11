@@ -104,18 +104,57 @@ def get_gsheet_client():
         st.secrets["gcp_service_account"], scopes=scopes)
     return gspread.authorize(creds)
 
+
+DB_COLUMNS = [
+    "timestamp",
+    "ram_size",
+    "storage_rom",
+    "processor",
+    "display_quality",
+    "human_model_price",
+    "ai_model_price",
+]
+
+
+def get_prediction_sheet(client):
+    """Return the prediction worksheet and ensure the header row exists."""
+    sheet = client.open("Laptop Price Predictions").sheet1
+    first_row = sheet.row_values(1)
+    if first_row != DB_COLUMNS:
+        if not first_row:
+            sheet.append_row(DB_COLUMNS)
+        else:
+            sheet.insert_row(DB_COLUMNS, 1)
+    return sheet
+
+
+def normalize_history_df(df):
+    """Force database history into the expected schema."""
+    if df.empty:
+        return df
+
+    df = df.copy()
+    if list(df.columns) == DB_COLUMNS:
+        return df
+
+    if len(df.columns) >= len(DB_COLUMNS):
+        df = df.iloc[:, :len(DB_COLUMNS)]
+        df.columns = DB_COLUMNS
+    return df
+
 def load_history():
     """Read all rows from the Google Sheet and return a DataFrame."""
     client = get_gsheet_client()
     if client is None:
         return pd.DataFrame()
     try:
-        sheet = client.open("Laptop Price Predictions").sheet1
-        records = sheet.get_all_records()
-        if not records:
+        sheet = get_prediction_sheet(client)
+        rows = sheet.get_all_values()
+        if len(rows) <= 1:
             return pd.DataFrame()
-        df = pd.DataFrame(records)
-        return df
+        data_rows = rows[1:] if rows[0] == DB_COLUMNS else rows
+        df = pd.DataFrame(data_rows, columns=DB_COLUMNS)
+        return normalize_history_df(df)
     except Exception:
         return pd.DataFrame()
 
@@ -125,7 +164,7 @@ def save_prediction(ram, rom, processor, display, price_h, price_a):
     if client is None:
         return
     try:
-        sheet = client.open("Laptop Price Predictions").sheet1
+        sheet = get_prediction_sheet(client)
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         sheet.append_row([timestamp, ram, rom, processor, display,
                           round(float(price_h), 2), round(float(price_a), 2)])
@@ -328,47 +367,37 @@ history_df = load_history()
 if history_df.empty:
     st.info("No prediction history found yet. Click **Get Prediction** to start logging data.")
 else:
-    # Rename columns for display
-    col_map = {
-        'timestamp': 'Timestamp',
-        'ram_size': 'RAM',
-        'storage_rom': 'Storage',
-        'processor': 'Processor',
-        'display_quality': 'Display',
-        'human_model_price': 'Human Price',
-        'ai_model_price': 'AI Price'
-    }
-    display_df = history_df.rename(columns=col_map)
+    display_df = normalize_history_df(history_df)
 
     # Show summary metrics of history
     hm1, hm2, hm3 = st.columns(3)
     with hm1:
         st.metric("Total Predictions", len(display_df))
     with hm2:
-        if 'Human Price' in display_df.columns:
-            avg_h = pd.to_numeric(display_df['Human Price'], errors='coerce').mean()
+        if 'human_model_price' in display_df.columns:
+            avg_h = pd.to_numeric(display_df['human_model_price'], errors='coerce').mean()
             st.metric("Avg Human Price", f"{avg_h:,.2f}" if not pd.isna(avg_h) else "N/A")
     with hm3:
-        if 'AI Price' in display_df.columns:
-            avg_a = pd.to_numeric(display_df['AI Price'], errors='coerce').mean()
+        if 'ai_model_price' in display_df.columns:
+            avg_a = pd.to_numeric(display_df['ai_model_price'], errors='coerce').mean()
             st.metric("Avg AI Price", f"{avg_a:,.2f}" if not pd.isna(avg_a) else "N/A")
 
     # History chart: line plot of predictions over time
-    if 'Timestamp' in display_df.columns and len(display_df) >= 2:
+    if 'timestamp' in display_df.columns and len(display_df) >= 2:
         st.markdown('<h3 class="section-header">Price Trend Over Time</h3>',
                     unsafe_allow_html=True)
         trend_df = display_df.copy()
-        trend_df['Human Price'] = pd.to_numeric(trend_df['Human Price'], errors='coerce')
-        trend_df['AI Price'] = pd.to_numeric(trend_df['AI Price'], errors='coerce')
+        trend_df['human_model_price'] = pd.to_numeric(trend_df['human_model_price'], errors='coerce')
+        trend_df['ai_model_price'] = pd.to_numeric(trend_df['ai_model_price'], errors='coerce')
         trend_df['Prediction #'] = range(1, len(trend_df) + 1)
 
         fig3, ax3 = plt.subplots(figsize=(10, 4), dpi=100)
-        ax3.plot(trend_df['Prediction #'], trend_df['Human Price'],
+        ax3.plot(trend_df['Prediction #'], trend_df['human_model_price'],
                  marker='o', color='#1A5F7A', linewidth=2, label='Human Model')
-        ax3.plot(trend_df['Prediction #'], trend_df['AI Price'],
+        ax3.plot(trend_df['Prediction #'], trend_df['ai_model_price'],
                  marker='s', color='#DD5353', linewidth=2, label='AI Model')
         ax3.fill_between(trend_df['Prediction #'],
-                         trend_df['Human Price'], trend_df['AI Price'],
+                         trend_df['human_model_price'], trend_df['ai_model_price'],
                          alpha=0.1, color='gray')
         ax3.set_xlabel('Prediction #', fontsize=12)
         ax3.set_ylabel('Price ($)', fontsize=12)
