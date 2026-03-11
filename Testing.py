@@ -4,6 +4,9 @@ import pickle
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
+import gspread
+from google.oauth2.service_account import Credentials
+from datetime import datetime
 
 st.set_page_config(page_title="Laptop Price Prediction System", layout="wide")
 
@@ -111,6 +114,23 @@ with col2:
     if predict_clicked or 'predictions_made' not in st.session_state:
         st.session_state['predictions_made'] = True
         price_h, price_a = get_predictions(ram, rom, processor, display)
+        
+        # --- Save to Google Sheets (Silently runs if configured) ---
+        if predict_clicked:
+            if "gcp_service_account" in st.secrets:
+                try:
+                    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+                    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
+                    client = gspread.authorize(creds)
+                    
+                    # Connects to your Google Sheet by its exact name
+                    sheet = client.open("Laptop Price Predictions").sheet1
+                    
+                    # Log the inputs & predictions
+                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    sheet.append_row([timestamp, ram, rom, processor, display, float(price_h), float(price_a)])
+                except Exception as e:
+                    st.warning(f"Google Sheets connection error: {e}")
         
         # Display nicely formatted result above chart
         st.markdown(f'<div class="results-text">Human-Implemented: {price_h:,.2f} &nbsp;|&nbsp; AI-Recommended: {price_a:,.2f}</div>', unsafe_allow_html=True)
