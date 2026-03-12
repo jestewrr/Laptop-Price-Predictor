@@ -214,7 +214,8 @@ def get_predictions(ram, rom, processor, display_q):
         input_df['processor_encoded'] = 0
     price_h = h_model.predict(input_df)[0]
     price_a = a_model.predict(input_df)[0]
-    return price_h, price_a
+    price_e = (price_h + price_a) / 2  # Ensemble (average)
+    return price_h, price_a, price_e
 
 # =============== SIDEBAR – Input Controls ===============
 with st.sidebar:
@@ -229,7 +230,7 @@ with st.sidebar:
 # =============== MAIN CONTENT ===============
 if predict_clicked or 'predictions_made' not in st.session_state:
     st.session_state['predictions_made'] = True
-    price_h, price_a = get_predictions(ram, rom, processor, display_q)
+    price_h, price_a, price_e = get_predictions(ram, rom, processor, display_q)
 
     if predict_clicked:
         save_prediction(ram, rom, processor, display_q, price_h, price_a)
@@ -245,9 +246,8 @@ if predict_clicked or 'predictions_made' not in st.session_state:
     # --- Metric cards row ---
     diff = price_h - price_a
     pct_diff = (diff / price_a * 100) if price_a != 0 else 0
-    avg_price = (price_h + price_a) / 2
 
-    m1, m2, m3, m4 = st.columns(4)
+    m1, m2, m3, m4, m5 = st.columns(5)
 
     with m1:
         st.markdown(f"""
@@ -266,6 +266,14 @@ if predict_clicked or 'predictions_made' not in st.session_state:
         </div>""", unsafe_allow_html=True)
 
     with m3:
+        st.markdown(f"""
+        <div class="metric-card" style="border: 2px solid #48bb78;">
+            <h3>Ensemble (Avg)</h3>
+            <h2>{price_e:,.2f}</h2>
+            <span class="delta-pos">Combined Prediction</span>
+        </div>""", unsafe_allow_html=True)
+
+    with m4:
         delta_class = "delta-pos" if diff >= 0 else "delta-neg"
         arrow = "▲" if diff >= 0 else "▼"
         st.markdown(f"""
@@ -275,12 +283,13 @@ if predict_clicked or 'predictions_made' not in st.session_state:
             <span class="{delta_class}">{arrow} {abs(pct_diff):.2f}%</span>
         </div>""", unsafe_allow_html=True)
 
-    with m4:
+    with m5:
+        confidence = max(0, 100 - abs(pct_diff))
         st.markdown(f"""
         <div class="metric-card">
-            <h3>Average Estimate</h3>
-            <h2>{avg_price:,.2f}</h2>
-            <span class="delta-neutral">Mean of both models</span>
+            <h3>Confidence</h3>
+            <h2>{confidence:.1f}%</h2>
+            <span class="delta-neutral">Model Agreement</span>
         </div>""", unsafe_allow_html=True)
 
     # --- Charts Row ---
@@ -292,14 +301,14 @@ if predict_clicked or 'predictions_made' not in st.session_state:
     with chart1:
         # Bar chart comparison
         plot_data = pd.DataFrame({
-            'Model': ['Human Model', 'AI Model'],
-            'Predicted Price': [price_h, price_a]
+            'Model': ['Human Model', 'AI Model', 'Ensemble'],
+            'Predicted Price': [price_h, price_a, price_e]
         })
         fig1, ax1 = plt.subplots(figsize=(6, 5), dpi=100)
         sns.set_theme(style="whitegrid")
         barplot = sns.barplot(x='Model', y='Predicted Price', hue='Model',
                               data=plot_data, legend=False, ax=ax1,
-                              palette=['#1A5F7A', '#DD5353'])
+                              palette=['#1A5F7A', '#DD5353', '#27ae60'])
         ax1.set_title(f'Price Prediction Comparison\n({ram}, {rom}, {processor}, {display_q})',
                       fontsize=14, fontweight='bold', pad=12)
         ax1.set_ylabel('Estimated Price', fontsize=12)
@@ -316,12 +325,12 @@ if predict_clicked or 'predictions_made' not in st.session_state:
         st.pyplot(fig1)
 
     with chart2:
-        # Radar / Pie breakdown showing contribution split
+        # Pie breakdown showing contribution split
         fig2, ax2 = plt.subplots(figsize=(6, 5), dpi=100)
-        sizes = [price_h, price_a]
-        labels = [f'Human\n{price_h:,.2f}', f'AI\n{price_a:,.2f}']
-        colors = ['#1A5F7A', '#DD5353']
-        explode = (0.04, 0.04)
+        sizes = [price_h, price_a, price_e]
+        labels = [f'Human\n{price_h:,.2f}', f'AI\n{price_a:,.2f}', f'Ensemble\n{price_e:,.2f}']
+        colors = ['#1A5F7A', '#DD5353', '#27ae60']
+        explode = (0.03, 0.03, 0.06)
         wedges, texts, autotexts = ax2.pie(
             sizes, explode=explode, labels=labels, autopct='%1.1f%%',
             colors=colors, startangle=140,
@@ -399,6 +408,14 @@ else:
         ax3.scatter(trend_df['timestamp'], trend_df['ai_model_price'],
                     s=100, facecolors='#FF69B4', edgecolors='#C71585',
                     linewidths=2, zorder=3, label='AI Model')
+
+        # Ensemble – green line with outlined circle markers
+        trend_df['ensemble_price'] = (trend_df['human_model_price'] + trend_df['ai_model_price']) / 2
+        ax3.plot(trend_df['timestamp'], trend_df['ensemble_price'],
+                 color='#27ae60', linewidth=3, linestyle='--', zorder=2)
+        ax3.scatter(trend_df['timestamp'], trend_df['ensemble_price'],
+                    s=100, facecolors='#2ecc71', edgecolors='#1e8449',
+                    linewidths=2, zorder=3, label='Ensemble')
 
         ax3.set_xlabel('Date & Time', fontsize=13, fontweight='bold')
         ax3.set_ylabel('Price', fontsize=13, fontweight='bold')
