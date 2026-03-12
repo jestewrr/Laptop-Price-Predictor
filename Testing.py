@@ -310,7 +310,7 @@ if predict_clicked or 'predictions_made' not in st.session_state:
                               palette=['#1A5F7A', '#DD5353'])
         ax1.set_title(f'Price Prediction Comparison\n({ram}, {rom}, {processor}, {display_q})',
                       fontsize=14, fontweight='bold', pad=12)
-        ax1.set_ylabel('Estimated Price ($)', fontsize=12)
+        ax1.set_ylabel('Estimated Price', fontsize=12)
         ax1.set_xlabel('')
         ax1.tick_params(labelsize=11)
         for p in barplot.patches:
@@ -350,10 +350,10 @@ if predict_clicked or 'predictions_made' not in st.session_state:
         'Feature': ['RAM Size', 'Storage (ROM)', 'Processor', 'Display Quality'],
         'Selected Value': [ram, rom, processor, display_q],
         'Encoding': [
-            f'ram_{ram}' if f'ram_{ram}' in features else 'N/A',
-            f'rom_{rom}' if f'rom_{rom}' in features else 'N/A',
+            f'ram_{ram}' if f'ram_{ram}' in features else 'Baseline (all 0s)',
+            f'rom_{rom}' if f'rom_{rom}' in features else 'Baseline (all 0s)',
             f'Encoded → {le.transform([processor])[0]}' if processor in (le.classes_ if hasattr(le, "classes_") else []) else 'N/A',
-            f'display_resolution_{display_q}' if f'display_resolution_{display_q}' in features else 'N/A'
+            f'display_resolution_{display_q}' if f'display_resolution_{display_q}' in features else 'Baseline (all 0s)'
         ]
     })
     st.dataframe(feature_df, use_container_width=True, hide_index=True)
@@ -389,18 +389,19 @@ else:
         trend_df = display_df.copy()
         trend_df['human_model_price'] = pd.to_numeric(trend_df['human_model_price'], errors='coerce')
         trend_df['ai_model_price'] = pd.to_numeric(trend_df['ai_model_price'], errors='coerce')
-        trend_df['Prediction #'] = range(1, len(trend_df) + 1)
+        trend_df['timestamp'] = pd.to_datetime(trend_df['timestamp'], errors='coerce')
 
         fig3, ax3 = plt.subplots(figsize=(10, 4), dpi=100)
-        ax3.plot(trend_df['Prediction #'], trend_df['human_model_price'],
+        ax3.plot(trend_df['timestamp'], trend_df['human_model_price'],
                  marker='o', color='#1A5F7A', linewidth=2, label='Human Model')
-        ax3.plot(trend_df['Prediction #'], trend_df['ai_model_price'],
+        ax3.plot(trend_df['timestamp'], trend_df['ai_model_price'],
                  marker='s', color='#DD5353', linewidth=2, label='AI Model')
-        ax3.fill_between(trend_df['Prediction #'],
+        ax3.fill_between(trend_df['timestamp'],
                          trend_df['human_model_price'], trend_df['ai_model_price'],
                          alpha=0.1, color='gray')
-        ax3.set_xlabel('Prediction #', fontsize=12)
-        ax3.set_ylabel('Price ($)', fontsize=12)
+        ax3.set_xlabel('Date & Time', fontsize=12)
+        ax3.set_ylabel('Price', fontsize=12)
+        fig3.autofmt_xdate(rotation=45)
         ax3.set_title('Prediction History Trend', fontsize=14, fontweight='bold')
         ax3.legend(fontsize=11)
         ax3.grid(True, alpha=0.3)
