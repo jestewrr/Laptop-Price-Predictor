@@ -181,14 +181,6 @@ def load_model():
         data = pickle.load(f)
     return data
 
-# --------------- Header ---------------
-st.markdown("""
-    <div class="header-container">
-        <h1>Laptop Price Prediction System</h1>
-        <p>Dual-Model Machine Learning Engine &bull; Compare Human-Tuned vs AI-Optimized Predictions</p>
-    </div>
-""", unsafe_allow_html=True)
-
 data = load_model()
 
 if data is None:
