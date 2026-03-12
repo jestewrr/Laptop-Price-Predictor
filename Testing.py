@@ -391,20 +391,33 @@ else:
         trend_df['ai_model_price'] = pd.to_numeric(trend_df['ai_model_price'], errors='coerce')
         trend_df['timestamp'] = pd.to_datetime(trend_df['timestamp'], errors='coerce')
 
-        fig3, ax3 = plt.subplots(figsize=(10, 4), dpi=100)
+        fig3, ax3 = plt.subplots(figsize=(10, 5), dpi=100, facecolor='white')
+        ax3.set_facecolor('white')
+
+        # Human Model – orange line with outlined circle markers
         ax3.plot(trend_df['timestamp'], trend_df['human_model_price'],
-                 marker='o', color='#1A5F7A', linewidth=2, label='Human Model')
+                 color='#FF8C00', linewidth=3, zorder=2)
+        ax3.scatter(trend_df['timestamp'], trend_df['human_model_price'],
+                    s=100, facecolors='#FFA500', edgecolors='#CC7000',
+                    linewidths=2, zorder=3, label='Human Model')
+
+        # AI Model – magenta/pink line with outlined circle markers
         ax3.plot(trend_df['timestamp'], trend_df['ai_model_price'],
-                 marker='s', color='#DD5353', linewidth=2, label='AI Model')
-        ax3.fill_between(trend_df['timestamp'],
-                         trend_df['human_model_price'], trend_df['ai_model_price'],
-                         alpha=0.1, color='gray')
-        ax3.set_xlabel('Date & Time', fontsize=12)
-        ax3.set_ylabel('Price', fontsize=12)
+                 color='#FF1493', linewidth=3, zorder=2)
+        ax3.scatter(trend_df['timestamp'], trend_df['ai_model_price'],
+                    s=100, facecolors='#FF69B4', edgecolors='#C71585',
+                    linewidths=2, zorder=3, label='AI Model')
+
+        ax3.set_xlabel('Date & Time', fontsize=13, fontweight='bold')
+        ax3.set_ylabel('Price', fontsize=13, fontweight='bold')
         fig3.autofmt_xdate(rotation=45)
-        ax3.set_title('Prediction History Trend', fontsize=14, fontweight='bold')
-        ax3.legend(fontsize=11)
-        ax3.grid(True, alpha=0.3)
+        ax3.set_title('Prediction History Trend', fontsize=16, fontweight='bold', pad=12)
+        ax3.legend(fontsize=12, frameon=True, fancybox=True, shadow=True,
+                   loc='upper left')
+        ax3.grid(True, alpha=0.35, color='#cccccc', linestyle='-')
+        ax3.tick_params(axis='both', labelsize=11)
+        for spine in ax3.spines.values():
+            spine.set_visible(False)
         fig3.tight_layout()
         st.pyplot(fig3)
 
