@@ -189,8 +189,8 @@ if data is None:
 
 try:
     h_model = data.get('human_model')
-    le = data.get('label_encoder')
-    features = data.get('feature_names', [])
+    le = data.get('label_encoder') or data.get('processor_encoder')
+    features = list(getattr(h_model, 'feature_names_in_', [])) or list(data.get('feature_names', []))
     
     if h_model is None:
         st.error("Model data corrupted: human_model (Random Forest) not found in pickle file.")
@@ -203,65 +203,110 @@ ram_options = ['8GB', '16GB', '32GB']
 rom_options = ['256GB', '512GB', '1TB', '2TB']
 display_options = ['FHD', '4K']
 
-# Safely get processor options
-if le is not None and hasattr(le, 'classes_'):
-    processor_options = list(le.classes_)
-else:
-    processor_options = ['i3', 'i5', 'i7', 'i9',
-                        'Ryzen 3', 'Ryzen 5', 'Ryzen 7', 'Ryzen 9']
+def normalize_feature_token(value):
+    return ''.join(ch.lower() for ch in str(value) if ch.isalnum())
+
+
+def convert_spec_to_gb(value):
+    value = str(value).upper()
+    if 'TB' in value:
+        return int(value.replace('TB', '')) * 1024
+    if 'GB' in value:
+        return int(value.replace('GB', ''))
+    return 0
+
+
+def derive_processor_options(feature_columns, processor_encoder):
+    if processor_encoder is not None and hasattr(processor_encoder, 'classes_'):
+        return list(processor_encoder.classes_)
+
+    derived = []
+    for col in feature_columns:
+        col_str = str(col)
+        if col_str.startswith('processor_') and col_str != 'processor_encoded':
+            label = col_str.split('processor_', 1)[1].replace('_', ' ')
+            if label and label not in derived:
+                derived.append(label)
+
+    return derived or ['i3', 'i5', 'i7', 'i9', 'Ryzen 3', 'Ryzen 5', 'Ryzen 7', 'Ryzen 9']
+
+
+processor_options = derive_processor_options(features, le)
+
+
+def build_input_frame(ram, rom, processor, display_q):
+    input_df = pd.DataFrame(0.0, index=[0], columns=features)
+    feature_lookup = {normalize_feature_token(col): col for col in features}
+    encoding_notes = {
+        'RAM Size': [],
+        'Storage (ROM)': [],
+        'Processor': [],
+        'Display Quality': [],
+    }
+
+    def assign_feature(normalized_name, value, note_bucket, note_label):
+        actual_name = feature_lookup.get(normalized_name)
+        if actual_name is not None:
+            input_df.at[0, actual_name] = value
+            encoding_notes[note_bucket].append(note_label)
+            return True
+        return False
+
+    ram_token = normalize_feature_token(ram)
+    rom_token = normalize_feature_token(rom)
+    processor_token = normalize_feature_token(processor)
+    display_token = normalize_feature_token(display_q)
+
+    ram_gb = convert_spec_to_gb(ram)
+    rom_gb = convert_spec_to_gb(rom)
+
+    assign_feature('ramgb', ram_gb, 'RAM Size', 'ram_gb')
+    assign_feature('ramnumeric', ram_gb, 'RAM Size', 'ram_numeric')
+    assign_feature('ram', ram_gb, 'RAM Size', 'ram')
+    assign_feature(f'ram{ram_token}', 1.0, 'RAM Size', f'ram_{ram}')
+
+    assign_feature('romgb', rom_gb, 'Storage (ROM)', 'rom_gb')
+    assign_feature('storagegb', rom_gb, 'Storage (ROM)', 'storage_gb')
+    assign_feature('storage', rom_gb, 'Storage (ROM)', 'storage')
+    assign_feature('rom', rom_gb, 'Storage (ROM)', 'rom')
+    assign_feature(f'rom{rom_token}', 1.0, 'Storage (ROM)', f'rom_{rom}')
+    assign_feature(f'storage{rom_token}', 1.0, 'Storage (ROM)', f'storage_{rom}')
+
+    assign_feature('displayresolution', 1.0 if display_q == '4K' else 0.0, 'Display Quality', 'display_resolution')
+    assign_feature('displayquality', 1.0 if display_q == '4K' else 0.0, 'Display Quality', 'display_quality')
+    assign_feature('display', 1.0 if display_q == '4K' else 0.0, 'Display Quality', 'display')
+    assign_feature(f'displayresolution{display_token}', 1.0, 'Display Quality', f'display_resolution_{display_q}')
+    assign_feature(f'display{display_token}', 1.0, 'Display Quality', f'display_{display_q}')
+
+    processor_dummy_set = assign_feature(f'processor{processor_token}', 1.0, 'Processor', f'processor_{processor}')
+
+    if le is not None and hasattr(le, 'transform'):
+        try:
+            encoded_val = float(le.transform([processor])[0])
+            if assign_feature('processorencoded', encoded_val, 'Processor', 'processor_encoded'):
+                processor_dummy_set = True
+            assign_feature('processor', encoded_val, 'Processor', 'processor')
+        except Exception:
+            pass
+
+    for key, notes in encoding_notes.items():
+        if not notes:
+            encoding_notes[key] = 'Baseline / no matching feature column'
+        else:
+            encoding_notes[key] = ', '.join(notes)
+
+    if not processor_dummy_set and encoding_notes['Processor'] == 'Baseline / no matching feature column':
+        encoding_notes['Processor'] = 'No processor feature match found in exported model'
+
+    return input_df, encoding_notes
 
 # --------------- Prediction function ---------------
 def get_predictions(ram, rom, processor, display_q):
     try:
-        # Build input dataframe
         if not features:
             st.error("Feature names not available in model.")
             return None
-            
-        # Create a properly formatted dataframe matching model's expected features
-        input_df = pd.DataFrame(0.0, index=[0], columns=features)
-        
-        # Encode RAM - try direct numeric value, then one-hot
-        ram_value = float(ram.replace('GB', ''))  # e.g., "32GB" -> 32.0
-        for col in features:
-            if col.lower() == 'ram' or col.lower() == 'ram_gb':
-                input_df[col] = ram_value
-            elif col.lower().startswith('ram_') and col.lower().endswith(ram.lower().replace('gb', '')):
-                input_df[col] = 1
-        
-        # Encode Storage (ROM) - try direct numeric value, then one-hot
-        rom_value = float(rom.replace('TB', '').replace('GB', ''))
-        if 'TB' in rom:
-            rom_value = rom_value * 1024  # Convert TB to GB
-        for col in features:
-            if col.lower() == 'storage' or col.lower() == 'storage_gb' or col.lower() == 'rom':
-                input_df[col] = rom_value
-            elif col.lower().startswith('rom_') or col.lower().startswith('storage_'):
-                rom_clean = rom.lower().replace('tb', '').replace('gb', '')
-                if rom_clean in col.lower():
-                    input_df[col] = 1
-        
-        # Encode Display Quality
-        for col in features:
-            if col.lower() == 'display' or col.lower() == 'display_quality':
-                input_df[col] = 1 if display_q == '4K' else 0
-            elif col.lower().startswith('display_'):
-                if display_q.lower() in col.lower():
-                    input_df[col] = 1
-        
-        # Encode Processor using Label Encoder
-        if le is not None and hasattr(le, 'transform'):
-            try:
-                encoded_val = le.transform([processor])[0]
-                # Find processor column
-                for col in features:
-                    if 'processor' in col.lower():
-                        input_df[col] = encoded_val
-                        break
-            except Exception as e:
-                st.warning(f"Processor encoding issue: {e}")
-        
-        # Make prediction
+        input_df, _ = build_input_frame(ram, rom, processor, display_q)
         price = h_model.predict(input_df)[0]
         return price
     except Exception as e:
@@ -309,14 +354,16 @@ if predict_clicked or 'predictions_made' not in st.session_state:
     st.markdown('<h3 class="section-header">Feature Input Summary</h3>',
                 unsafe_allow_html=True)
 
+    _, encoding_notes = build_input_frame(ram, rom, processor, display_q)
+
     feature_df = pd.DataFrame({
         'Feature': ['RAM Size', 'Storage (ROM)', 'Processor', 'Display Quality'],
         'Selected Value': [ram, rom, processor, display_q],
         'Encoding': [
-            f'ram_{ram}' if f'ram_{ram}' in features else 'Baseline (all 0s)',
-            f'rom_{rom}' if f'rom_{rom}' in features else 'Baseline (all 0s)',
-            f'Encoded → {le.transform([processor])[0]}' if processor in (le.classes_ if hasattr(le, "classes_") else []) else 'N/A',
-            f'display_resolution_{display_q}' if f'display_resolution_{display_q}' in features else 'Baseline (all 0s)'
+            encoding_notes['RAM Size'],
+            encoding_notes['Storage (ROM)'],
+            encoding_notes['Processor'],
+            encoding_notes['Display Quality']
         ]
     })
     st.dataframe(feature_df, use_container_width=True, hide_index=True)
