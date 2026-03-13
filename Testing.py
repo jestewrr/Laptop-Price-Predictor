@@ -329,7 +329,7 @@ else:
                     linewidths=2, zorder=3)
 
         ax3.set_xlabel('Date & Time', fontsize=12, fontweight='bold', color='#2c3e50')
-        ax3.set_ylabel('Predicted Price (₹)', fontsize=12, fontweight='bold', color='#2c3e50')
+        ax3.set_ylabel('Predicted Price ($)', fontsize=12, fontweight='bold', color='#2c3e50')
         fig3.autofmt_xdate(rotation=45)
         ax3.set_title('Prediction History Trend: Forest vs XGBoost', fontsize=15, fontweight='bold', pad=15, color='#2c3e50')
         ax3.legend(fontsize=10, frameon=True, fancybox=True, shadow=True,
@@ -366,12 +366,12 @@ else:
             "human_model_price": st.column_config.NumberColumn(
                 "Random Forest Price",
                 help="Price predicted by the Random Forest model",
-                format="₹%,.2f",
+                format="$%,.2f",
             ),
             "ai_model_price": st.column_config.NumberColumn(
                 "XG Boost Price",
                 help="Price predicted by the XG Boost model",
-                format="₹%,.2f",
+                format="$%,.2f",
             ),
         }
     )
