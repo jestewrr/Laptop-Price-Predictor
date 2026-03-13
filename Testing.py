@@ -215,9 +215,9 @@ def get_predictions(ram, rom, processor, display_q):
     price_h = h_model.predict(input_df)[0]
     price_a = a_model.predict(input_df)[0]
     if price_h >= price_a:
-        return price_h, 'Human Model'
+        return price_h, 'Human Model (Random Forest)'
     else:
-        return price_a, 'AI Model'
+        return price_a, 'AI Model (XG Boost)'
 
 # =============== SIDEBAR – Input Controls ===============
 with st.sidebar:
@@ -257,11 +257,13 @@ if predict_clicked or 'predictions_made' not in st.session_state:
         </div>""", unsafe_allow_html=True)
 
     with m2:
+        # Determine algorithm based on the source model string
+        algo_name = "XG Boost" if "AI" in source_model else "Random Forest"
         st.markdown(f"""
         <div class="metric-card">
             <h3>Source Model</h3>
-            <h2>{source_model}</h2>
-            <span class="delta-neutral">Highest prediction selected</span>
+            <h2 style="font-size: 24px;">{source_model}</h2>
+            <span class="delta-neutral">{algo_name} performed better</span>
         </div>""", unsafe_allow_html=True)
 
     # --- Feature Input Summary Table ---
@@ -330,5 +332,37 @@ else:
         fig3.tight_layout()
         st.pyplot(fig3)
 
-    # Full history table
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    # Full history table - IMPROVED
+    st.markdown('<h3 class="section-header">Detailed Prediction Logs</h3>',
+                unsafe_allow_html=True)
+    
+    # Sort history by timestamp descending for the table
+    if 'timestamp' in display_df.columns:
+        display_df['timestamp'] = pd.to_datetime(display_df['timestamp'])
+        display_df = display_df.sort_values('timestamp', ascending=False)
+
+    st.dataframe(
+        display_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "timestamp": st.column_config.DatetimeColumn(
+                "Date & Time",
+                format="D MMM YYYY, h:mm a",
+            ),
+            "ram_size": "RAM",
+            "storage_rom": "Storage",
+            "processor": "Processor",
+            "display_quality": "Display",
+            "human_model_price": st.column_config.NumberColumn(
+                "Random Forest Price",
+                help="Price predicted by the Random Forest model",
+                format="$%,.2f",
+            ),
+            "ai_model_price": st.column_config.NumberColumn(
+                "XG Boost Price",
+                help="Price predicted by the XG Boost model",
+                format="$%,.2f",
+            ),
+        }
+    )
