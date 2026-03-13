@@ -158,7 +158,7 @@ def load_history():
     except Exception:
         return pd.DataFrame()
 
-def save_prediction(ram, rom, processor, display, price_h, price_a):
+def save_prediction(ram, rom, processor, display, price_h):
     """Append a prediction row to Google Sheets."""
     client = get_gsheet_client()
     if client is None:
@@ -167,7 +167,7 @@ def save_prediction(ram, rom, processor, display, price_h, price_a):
         sheet = get_prediction_sheet(client)
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         sheet.append_row([timestamp, ram, rom, processor, display,
-                          round(float(price_h), 2), round(float(price_a), 2)])
+                          round(float(price_h), 2), round(float(price_h), 2)])
     except Exception as e:
         st.warning(f"Google Sheets connection error: {e}")
 
@@ -189,12 +189,11 @@ if data is None:
 
 try:
     h_model = data.get('human_model')
-    a_model = data.get('ai_model')
     le = data.get('label_encoder')
     features = data.get('feature_names', [])
     
-    if h_model is None or a_model is None:
-        st.error("Model data corrupted: human_model or ai_model not found in pickle file.")
+    if h_model is None:
+        st.error("Model data corrupted: human_model (Random Forest) not found in pickle file.")
         st.stop()
 except Exception as e:
     st.error(f"Error loading model: {str(e)}")
@@ -217,7 +216,7 @@ def get_predictions(ram, rom, processor, display_q):
         # Build input dataframe with only known features
         if not features:
             st.error("Feature names not available in model.")
-            return None, None
+            return None
             
         input_df = pd.DataFrame(0, index=[0], columns=features)
         
@@ -244,17 +243,12 @@ def get_predictions(ram, rom, processor, display_q):
             except Exception:
                 pass
         
-        # Make predictions
-        price_h = h_model.predict(input_df)[0]
-        price_a = a_model.predict(input_df)[0]
-        
-        if price_h >= price_a:
-            return price_h, 'Human Model (Random Forest)'
-        else:
-            return price_a, 'AI Model (XG Boost)'
+        # Make prediction with Random Forest (human_model)
+        price = h_model.predict(input_df)[0]
+        return price
     except Exception as e:
         st.error(f"Prediction error: {str(e)}")
-        return None, None
+        return None
 
 # =============== SIDEBAR – Input Controls ===============
 with st.sidebar:
@@ -269,13 +263,13 @@ with st.sidebar:
 # =============== MAIN CONTENT ===============
 if predict_clicked or 'predictions_made' not in st.session_state:
     st.session_state['predictions_made'] = True
-    predicted_price, source_model = get_predictions(ram, rom, processor, display_q)
+    predicted_price = get_predictions(ram, rom, processor, display_q)
 
-    if predicted_price is None or source_model is None:
+    if predicted_price is None:
         st.stop()
     
     if predict_clicked:
-        save_prediction(ram, rom, processor, display_q, predicted_price, predicted_price)
+        save_prediction(ram, rom, processor, display_q, predicted_price)
 
     # --- Spec badges ---
     st.markdown(
@@ -285,26 +279,13 @@ if predict_clicked or 'predictions_made' not in st.session_state:
         f'<span class="specs-badge">Display: {display_q}</span>',
         unsafe_allow_html=True)
 
-    # --- Metric cards row ---
-    m1, m2 = st.columns(2)
-
-    with m1:
-        st.markdown(f"""
-        <div class="metric-card" style="border: 2px solid #48bb78;">
-            <h3>Predicted Price</h3>
-            <h2>{predicted_price:,.2f}</h2>
-            <span class="delta-pos">Best Estimate</span>
-        </div>""", unsafe_allow_html=True)
-
-    with m2:
-        # Determine algorithm based on the source model string
-        algo_name = "XG Boost" if "AI" in source_model else "Random Forest"
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Source Model</h3>
-            <h2 style="font-size: 24px;">{source_model}</h2>
-            <span class="delta-neutral">{algo_name} performed better</span>
-        </div>""", unsafe_allow_html=True)
+    # --- Single metric card for prediction ---
+    st.markdown(f"""
+    <div class="metric-card" style="border: 2px solid #48bb78;">
+        <h3>Predicted Price (Random Forest)</h3>
+        <h2>₹{predicted_price:,.2f}</h2>
+        <span class="delta-pos">Best Estimate</span>
+    </div>""", unsafe_allow_html=True)
 
     # --- Feature Input Summary Table ---
     st.markdown('<h3 class="section-header">Feature Input Summary</h3>',
@@ -344,7 +325,7 @@ else:
 
     # History chart: line plot of predictions over time
     if 'timestamp' in display_df.columns and len(display_df) >= 2:
-        st.markdown('<h3 class="section-header">Price Trend Over Time</h3>',
+        st.markdown('<h3 class="section-header">Price Prediction Trend</h3>',
                     unsafe_allow_html=True)
         trend_df = display_df.copy()
         trend_df['human_model_price'] = pd.to_numeric(trend_df['human_model_price'], errors='coerce')
@@ -352,34 +333,24 @@ else:
 
         fig3, ax3 = plt.subplots(figsize=(12, 6), dpi=100, facecolor='#f5f7fa')
         ax3.set_facecolor('#ffffff')
-        
-        # Prepare AI model data
-        trend_df['ai_model_price'] = pd.to_numeric(trend_df['ai_model_price'], errors='coerce')
 
-        # Add subtle fill between the two models for visual comparison
-        ax3.fill_between(trend_df['timestamp'], 
-                         trend_df['human_model_price'], 
-                         trend_df['ai_model_price'],
-                         alpha=0.12, color='#9b59b6', zorder=1, label='Price Variance')
-
-        # Plot Human Model (Random Forest) - Blue accent
+        # Plot Random Forest Model only
         ax3.plot(trend_df['timestamp'], trend_df['human_model_price'],
-                 color='#3498db', linewidth=3.5, zorder=3, label='Random Forest (Baseline)',
-                 marker='o', markersize=7, markerfacecolor='#5dade2', 
+                 color='#3498db', linewidth=3.5, zorder=3, label='Random Forest Model',
+                 marker='o', markersize=8, markerfacecolor='#5dade2', 
                  markeredgecolor='#2c3e50', markeredgewidth=1.5, alpha=0.95)
-
-        # Plot AI Model (XG Boost) - Green accent
-        ax3.plot(trend_df['timestamp'], trend_df['ai_model_price'],
-                 color='#27ae60', linewidth=3.5, zorder=3, label='XGBoost (AI Model)',
-                 marker='s', markersize=7, markerfacecolor='#2ecc71', 
-                 markeredgecolor='#2c3e50', markeredgewidth=1.5, alpha=0.95)
+        
+        # Add subtle area fill under the line
+        ax3.fill_between(trend_df['timestamp'], 
+                         trend_df['human_model_price'],
+                         alpha=0.15, color='#3498db', zorder=1)
 
         # Enhanced styling
         ax3.set_xlabel('Date & Time', fontsize=13, fontweight='bold', color='#2c3e50', labelpad=10)
         ax3.set_ylabel('Predicted Price (₹)', fontsize=13, fontweight='bold', color='#2c3e50', labelpad=10)
         fig3.autofmt_xdate(rotation=45, ha='right')
         
-        ax3.set_title('Model Comparison: Price Predictions Over Time', 
+        ax3.set_title('Random Forest: Laptop Price Predictions Over Time', 
                       fontsize=16, fontweight='bold', pad=20, color='#1a1a2e', 
                       fontfamily='sans-serif', loc='left')
         
@@ -426,14 +397,10 @@ else:
             "processor": "Processor",
             "display_quality": "Display",
             "human_model_price": st.column_config.NumberColumn(
-                "Random Forest Price",
+                "Predicted Price (Random Forest)",
                 help="Price predicted by the Random Forest model",
-                format="$%,.2f",
+                format="₹%,.2f",
             ),
-            "ai_model_price": st.column_config.NumberColumn(
-                "XG Boost Price",
-                help="Price predicted by the XG Boost model",
-                format="$%,.2f",
-            ),
+            "ai_model_price": None,
         }
     )
