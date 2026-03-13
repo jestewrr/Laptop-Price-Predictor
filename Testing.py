@@ -213,37 +213,55 @@ else:
 # --------------- Prediction function ---------------
 def get_predictions(ram, rom, processor, display_q):
     try:
-        # Build input dataframe with only known features
+        # Build input dataframe
         if not features:
             st.error("Feature names not available in model.")
             return None
             
-        input_df = pd.DataFrame(0, index=[0], columns=features)
+        # Create a properly formatted dataframe matching model's expected features
+        input_df = pd.DataFrame(0.0, index=[0], columns=features)
         
-        # Set one-hot encoded features if they exist
-        if f'ram_{ram}' in input_df.columns:
-            input_df[f'ram_{ram}'] = 1
-        if f'rom_{rom}' in input_df.columns:
-            input_df[f'rom_{rom}'] = 1
-        if f'display_resolution_{display_q}' in input_df.columns:
-            input_df[f'display_resolution_{display_q}'] = 1
+        # Encode RAM - try direct numeric value, then one-hot
+        ram_value = float(ram.replace('GB', ''))  # e.g., "32GB" -> 32.0
+        for col in features:
+            if col.lower() == 'ram' or col.lower() == 'ram_gb':
+                input_df[col] = ram_value
+            elif col.lower().startswith('ram_') and col.lower().endswith(ram.lower().replace('gb', '')):
+                input_df[col] = 1
         
-        # Handle processor encoding
-        processor_col = None
+        # Encode Storage (ROM) - try direct numeric value, then one-hot
+        rom_value = float(rom.replace('TB', '').replace('GB', ''))
+        if 'TB' in rom:
+            rom_value = rom_value * 1024  # Convert TB to GB
+        for col in features:
+            if col.lower() == 'storage' or col.lower() == 'storage_gb' or col.lower() == 'rom':
+                input_df[col] = rom_value
+            elif col.lower().startswith('rom_') or col.lower().startswith('storage_'):
+                rom_clean = rom.lower().replace('tb', '').replace('gb', '')
+                if rom_clean in col.lower():
+                    input_df[col] = 1
+        
+        # Encode Display Quality
+        for col in features:
+            if col.lower() == 'display' or col.lower() == 'display_quality':
+                input_df[col] = 1 if display_q == '4K' else 0
+            elif col.lower().startswith('display_'):
+                if display_q.lower() in col.lower():
+                    input_df[col] = 1
+        
+        # Encode Processor using Label Encoder
         if le is not None and hasattr(le, 'transform'):
             try:
                 encoded_val = le.transform([processor])[0]
-                # Find processor column name in features
+                # Find processor column
                 for col in features:
                     if 'processor' in col.lower():
-                        processor_col = col
+                        input_df[col] = encoded_val
                         break
-                if processor_col and processor_col in input_df.columns:
-                    input_df[processor_col] = encoded_val
-            except Exception:
-                pass
+            except Exception as e:
+                st.warning(f"Processor encoding issue: {e}")
         
-        # Make prediction with Random Forest (human_model)
+        # Make prediction
         price = h_model.predict(input_df)[0]
         return price
     except Exception as e:
