@@ -313,18 +313,27 @@ else:
         fig3, ax3 = plt.subplots(figsize=(10, 5), dpi=100, facecolor='white')
         ax3.set_facecolor('white')
 
+        # Plot Human Model (Random Forest)
         ax3.plot(trend_df['timestamp'], trend_df['human_model_price'],
-                 color='#27ae60', linewidth=3, zorder=2)
+                 color='#3498db', linewidth=3, zorder=2, label='Random Forest Price')
         ax3.scatter(trend_df['timestamp'], trend_df['human_model_price'],
-                    s=100, facecolors='#2ecc71', edgecolors='#1e8449',
-                    linewidths=2, zorder=3, label='Predicted Price')
+                    s=80, facecolors='#5dade2', edgecolors='#2e86c1',
+                    linewidths=2, zorder=3)
 
-        ax3.set_xlabel('Date & Time', fontsize=13, fontweight='bold')
-        ax3.set_ylabel('Price', fontsize=13, fontweight='bold')
+        # Plot AI Model (XG Boost)
+        trend_df['ai_model_price'] = pd.to_numeric(trend_df['ai_model_price'], errors='coerce')
+        ax3.plot(trend_df['timestamp'], trend_df['ai_model_price'],
+                 color='#27ae60', linewidth=3, zorder=2, label='XG Boost Price')
+        ax3.scatter(trend_df['timestamp'], trend_df['ai_model_price'],
+                    s=80, facecolors='#2ecc71', edgecolors='#1e8449',
+                    linewidths=2, zorder=3)
+
+        ax3.set_xlabel('Date & Time', fontsize=12, fontweight='bold', color='#2c3e50')
+        ax3.set_ylabel('Predicted Price ($)', fontsize=12, fontweight='bold', color='#2c3e50')
         fig3.autofmt_xdate(rotation=45)
-        ax3.set_title('Prediction History Trend', fontsize=16, fontweight='bold', pad=12)
-        ax3.legend(fontsize=12, frameon=True, fancybox=True, shadow=True,
-                   loc='upper left')
+        ax3.set_title('Prediction History Trend: Forest vs XGBoost', fontsize=15, fontweight='bold', pad=15, color='#2c3e50')
+        ax3.legend(fontsize=10, frameon=True, fancybox=True, shadow=True,
+                   loc='upper left', bbox_to_anchor=(1, 1))
         ax3.grid(True, alpha=0.35, color='#cccccc', linestyle='-')
         ax3.tick_params(axis='both', labelsize=11)
         for spine in ax3.spines.values():
