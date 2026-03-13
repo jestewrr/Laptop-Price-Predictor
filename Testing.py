@@ -217,8 +217,11 @@ def convert_spec_to_gb(value):
 
 
 def derive_processor_options(feature_columns, processor_encoder):
+    default_processors = ['i3', 'i5', 'i7', 'i9', 'Ryzen 3', 'Ryzen 5', 'Ryzen 7', 'Ryzen 9']
+
     if processor_encoder is not None and hasattr(processor_encoder, 'classes_'):
-        return list(processor_encoder.classes_)
+        encoder_values = list(processor_encoder.classes_)
+        return default_processors + [value for value in encoder_values if value not in default_processors]
 
     derived = []
     for col in feature_columns:
@@ -228,7 +231,7 @@ def derive_processor_options(feature_columns, processor_encoder):
             if label and label not in derived:
                 derived.append(label)
 
-    return derived or ['i3', 'i5', 'i7', 'i9', 'Ryzen 3', 'Ryzen 5', 'Ryzen 7', 'Ryzen 9']
+    return default_processors + [value for value in derived if value not in default_processors]
 
 
 processor_options = derive_processor_options(features, le)
