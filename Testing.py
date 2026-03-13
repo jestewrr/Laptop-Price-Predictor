@@ -310,36 +310,58 @@ else:
         trend_df['human_model_price'] = pd.to_numeric(trend_df['human_model_price'], errors='coerce')
         trend_df['timestamp'] = pd.to_datetime(trend_df['timestamp'], errors='coerce')
 
-        fig3, ax3 = plt.subplots(figsize=(10, 5), dpi=100, facecolor='white')
-        ax3.set_facecolor('white')
-
-        # Plot Human Model (Random Forest)
-        ax3.plot(trend_df['timestamp'], trend_df['human_model_price'],
-                 color='#3498db', linewidth=3, zorder=2, label='Random Forest Price')
-        ax3.scatter(trend_df['timestamp'], trend_df['human_model_price'],
-                    s=80, facecolors='#5dade2', edgecolors='#2e86c1',
-                    linewidths=2, zorder=3)
-
-        # Plot AI Model (XG Boost)
+        fig3, ax3 = plt.subplots(figsize=(12, 6), dpi=100, facecolor='#f5f7fa')
+        ax3.set_facecolor('#ffffff')
+        
+        # Prepare AI model data
         trend_df['ai_model_price'] = pd.to_numeric(trend_df['ai_model_price'], errors='coerce')
-        ax3.plot(trend_df['timestamp'], trend_df['ai_model_price'],
-                 color='#27ae60', linewidth=3, zorder=2, label='XG Boost Price')
-        ax3.scatter(trend_df['timestamp'], trend_df['ai_model_price'],
-                    s=80, facecolors='#2ecc71', edgecolors='#1e8449',
-                    linewidths=2, zorder=3)
 
-        ax3.set_xlabel('Date & Time', fontsize=12, fontweight='bold', color='#2c3e50')
-        ax3.set_ylabel('Predicted Price ($)', fontsize=12, fontweight='bold', color='#2c3e50')
-        fig3.autofmt_xdate(rotation=45)
-        ax3.set_title('Prediction History Trend: Forest vs XGBoost', fontsize=15, fontweight='bold', pad=15, color='#2c3e50')
-        ax3.legend(fontsize=10, frameon=True, fancybox=True, shadow=True,
-                   loc='upper left', bbox_to_anchor=(1, 1))
-        ax3.grid(True, alpha=0.35, color='#cccccc', linestyle='-')
-        ax3.tick_params(axis='both', labelsize=11)
+        # Add subtle fill between the two models for visual comparison
+        ax3.fill_between(trend_df['timestamp'], 
+                         trend_df['human_model_price'], 
+                         trend_df['ai_model_price'],
+                         alpha=0.12, color='#9b59b6', zorder=1, label='Price Variance')
+
+        # Plot Human Model (Random Forest) - Blue accent
+        ax3.plot(trend_df['timestamp'], trend_df['human_model_price'],
+                 color='#3498db', linewidth=3.5, zorder=3, label='Random Forest (Baseline)',
+                 marker='o', markersize=7, markerfacecolor='#5dade2', 
+                 markeredgecolor='#2c3e50', markeredgewidth=1.5, alpha=0.95)
+
+        # Plot AI Model (XG Boost) - Green accent
+        ax3.plot(trend_df['timestamp'], trend_df['ai_model_price'],
+                 color='#27ae60', linewidth=3.5, zorder=3, label='XGBoost (AI Model)',
+                 marker='s', markersize=7, markerfacecolor='#2ecc71', 
+                 markeredgecolor='#2c3e50', markeredgewidth=1.5, alpha=0.95)
+
+        # Enhanced styling
+        ax3.set_xlabel('Date & Time', fontsize=13, fontweight='bold', color='#2c3e50', labelpad=10)
+        ax3.set_ylabel('Predicted Price (₹)', fontsize=13, fontweight='bold', color='#2c3e50', labelpad=10)
+        fig3.autofmt_xdate(rotation=45, ha='right')
+        
+        ax3.set_title('Model Comparison: Price Predictions Over Time', 
+                      fontsize=16, fontweight='bold', pad=20, color='#1a1a2e', 
+                      fontfamily='sans-serif', loc='left')
+        
+        # Premium legend styling
+        ax3.legend(fontsize=11, frameon=True, fancybox=True, shadow=True,
+                   loc='upper left', framealpha=0.95, edgecolor='#bdc3c7', 
+                   borderpad=1.2, labelspacing=0.8)
+        
+        # Refined grid
+        ax3.grid(True, alpha=0.2, color='#bdc3c7', linestyle='--', linewidth=0.8)
+        ax3.set_axisbelow(True)
+        
+        # Enhanced tick styling
+        ax3.tick_params(axis='both', labelsize=11, colors='#2c3e50', length=5, width=1)
+        
+        # Subtle spines
         for spine in ax3.spines.values():
-            spine.set_visible(False)
+            spine.set_color('#bdc3c7')
+            spine.set_linewidth(1.5)
+        
         fig3.tight_layout()
-        st.pyplot(fig3)
+        st.pyplot(fig3, use_container_width=True)
 
     # Full history table - IMPROVED
     st.markdown('<h3 class="section-header">Detailed Prediction Logs</h3>',
