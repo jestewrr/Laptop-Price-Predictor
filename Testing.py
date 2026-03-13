@@ -213,26 +213,48 @@ else:
 
 # --------------- Prediction function ---------------
 def get_predictions(ram, rom, processor, display_q):
-    input_df = pd.DataFrame(0, index=[0], columns=features)
-    if f'ram_{ram}' in input_df.columns:
-        input_df[f'ram_{ram}'] = 1
-    if f'rom_{rom}' in input_df.columns:
-        input_df[f'rom_{rom}'] = 1
-    if f'display_resolution_{display_q}' in input_df.columns:
-        input_df[f'display_resolution_{display_q}'] = 1
     try:
+        # Build input dataframe with only known features
+        if not features:
+            st.error("Feature names not available in model.")
+            return None, None
+            
+        input_df = pd.DataFrame(0, index=[0], columns=features)
+        
+        # Set one-hot encoded features if they exist
+        if f'ram_{ram}' in input_df.columns:
+            input_df[f'ram_{ram}'] = 1
+        if f'rom_{rom}' in input_df.columns:
+            input_df[f'rom_{rom}'] = 1
+        if f'display_resolution_{display_q}' in input_df.columns:
+            input_df[f'display_resolution_{display_q}'] = 1
+        
+        # Handle processor encoding
+        processor_col = None
         if le is not None and hasattr(le, 'transform'):
-            input_df['processor_encoded'] = le.transform([processor])[0]
+            try:
+                encoded_val = le.transform([processor])[0]
+                # Find processor column name in features
+                for col in features:
+                    if 'processor' in col.lower():
+                        processor_col = col
+                        break
+                if processor_col and processor_col in input_df.columns:
+                    input_df[processor_col] = encoded_val
+            except Exception:
+                pass
+        
+        # Make predictions
+        price_h = h_model.predict(input_df)[0]
+        price_a = a_model.predict(input_df)[0]
+        
+        if price_h >= price_a:
+            return price_h, 'Human Model (Random Forest)'
         else:
-            input_df['processor_encoded'] = 0
-    except Exception:
-        input_df['processor_encoded'] = 0
-    price_h = h_model.predict(input_df)[0]
-    price_a = a_model.predict(input_df)[0]
-    if price_h >= price_a:
-        return price_h, 'Human Model (Random Forest)'
-    else:
-        return price_a, 'AI Model (XG Boost)'
+            return price_a, 'AI Model (XG Boost)'
+    except Exception as e:
+        st.error(f"Prediction error: {str(e)}")
+        return None, None
 
 # =============== SIDEBAR – Input Controls ===============
 with st.sidebar:
@@ -249,6 +271,9 @@ if predict_clicked or 'predictions_made' not in st.session_state:
     st.session_state['predictions_made'] = True
     predicted_price, source_model = get_predictions(ram, rom, processor, display_q)
 
+    if predicted_price is None or source_model is None:
+        st.stop()
+    
     if predict_clicked:
         save_prediction(ram, rom, processor, display_q, predicted_price, predicted_price)
 
