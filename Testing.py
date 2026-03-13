@@ -187,17 +187,29 @@ if data is None:
     st.error("Model file 'dual_price_models.pkl' not found.")
     st.stop()
 
-h_model = data['human_model']
-a_model = data['ai_model']
-le = data['label_encoder']
-features = data['feature_names']
+try:
+    h_model = data.get('human_model')
+    a_model = data.get('ai_model')
+    le = data.get('label_encoder')
+    features = data.get('feature_names', [])
+    
+    if h_model is None or a_model is None:
+        st.error("Model data corrupted: human_model or ai_model not found in pickle file.")
+        st.stop()
+except Exception as e:
+    st.error(f"Error loading model: {str(e)}")
+    st.stop()
 
 ram_options = ['8GB', '16GB', '32GB']
 rom_options = ['256GB', '512GB', '1TB', '2TB']
 display_options = ['FHD', '4K']
-processor_options = (list(le.classes_) if hasattr(le, 'classes_')
-                     else ['i3', 'i5', 'i7', 'i9',
-                            'Ryzen 3', 'Ryzen 5', 'Ryzen 7', 'Ryzen 9'])
+
+# Safely get processor options
+if le is not None and hasattr(le, 'classes_'):
+    processor_options = list(le.classes_)
+else:
+    processor_options = ['i3', 'i5', 'i7', 'i9',
+                        'Ryzen 3', 'Ryzen 5', 'Ryzen 7', 'Ryzen 9']
 
 # --------------- Prediction function ---------------
 def get_predictions(ram, rom, processor, display_q):
@@ -209,7 +221,10 @@ def get_predictions(ram, rom, processor, display_q):
     if f'display_resolution_{display_q}' in input_df.columns:
         input_df[f'display_resolution_{display_q}'] = 1
     try:
-        input_df['processor_encoded'] = le.transform([processor])[0]
+        if le is not None and hasattr(le, 'transform'):
+            input_df['processor_encoded'] = le.transform([processor])[0]
+        else:
+            input_df['processor_encoded'] = 0
     except Exception:
         input_df['processor_encoded'] = 0
     price_h = h_model.predict(input_df)[0]
